@@ -4,7 +4,8 @@ const cors = require('cors')
 const express = require('express');
 const fs = require('fs');
 const https = require('https');
-
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+const axios = require('axios');
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -37,7 +38,7 @@ async function deleteProperty(property_id) {
     console.error(error);
   }
 }
-  
+
 
 async function checkUser(username, password) {
   try {
@@ -80,9 +81,30 @@ async function updateProperty(id, name, value) {
   }
 }
 
-async function insertUser(username, password, name, type) {
+async function addProperty(user_id, address, type, price, status, fileName) {
   try {
-    const res = await pool.query("INSERT INTO userlist (username, password, name, user_type) VALUES ($1, $2, $3, $4);", [username, password, name, type]);
+    const res = await pool.query("INSERT INTO property (user_id, address, type, price, status, filename) VALUES ($1, $2, $3, $4, $5, $6);", [user_id, address, type, price, status, fileName]);
+    return "success"
+  }
+  catch (error) {
+    console.error(error);
+    return "error";
+  }
+}
+
+async function filterProperty(type, price) {
+  try {
+    const res = await pool.query("SELECT * FROM property WHERE (type = $1 OR $1 IS NULL) AND (price < $2 OR $2 IS NULL) AND status = 'available';", [type, price]);
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+  }
+}
+
+async function insertUser(username, password, name, type, email) {
+  try {
+    const res = await pool.query("INSERT INTO userlist (username, password, name, user_type, email) VALUES ($1, $2, $3, $4, $5);", [username, password, name, type, email]);
     //also print the query
     return res
   } catch (error) {
@@ -114,6 +136,17 @@ async function getUsertype(username) {
 async function getAllProperties() {
   try {
     console.log("GET ALL PROPERTIES");
+    const res = await pool.query("SELECT * FROM property WHERE status = 'available';");
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+  }
+}
+
+async function getAllPropertiesAdmin() {
+  try {
+    console.log("GET ALL PROPERTIES");
     const res = await pool.query("SELECT * FROM property;");
     return res.rows;
   }
@@ -122,16 +155,6 @@ async function getAllProperties() {
   }
 }
 
-async function getAllUsers() {
-  try {
-    console.log("GET ALL PROPERTIES");
-    const res = await pool.query("SELECT * FROM userlist;");
-    return res.rows;
-  }
-  catch (error) {
-    console.error(error);
-  }
-}
 
 async function getAllUsers() {
   try {
@@ -143,6 +166,50 @@ async function getAllUsers() {
   }
 }
 
+
+async function purchaseProperty(property_id, buyerId) {
+  try {
+    const res = await pool.query("UPDATE property SET status = 'purchased' , soldto = $1 WHERE property_id = $2;", [buyerId, property_id]);
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+    return { message: "error" }
+  }
+}
+
+async function sellProperty(property_id) {
+  try {
+    "select * from contracts where id = $1"
+    const res = await pool.query("select * from contracts where id = $1", [property_id]);
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+    return { message: "error" }
+  }
+}
+
+async function getBoughtProperties(id) {
+  console.log("GET BOUGHT PROPERTIES");
+  try {
+    const res = await pool.query("SELECT * FROM property WHERE soldto = $1;", [id]);
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+  }
+}
+
+async function getEmailfromID(id) {
+  try {
+    const res = await pool.query("SELECT email FROM userlist WHERE user_id = $1;", [id]);
+    return res.rows;
+  }
+  catch (error) {
+    console.error(error);
+  }
+}
 
 app.get('/sharks', (req, res) => {
   console.log("GET /sharks");
@@ -180,9 +247,9 @@ app.post('/canLogin', (req, res) => {
 
 
 app.post('/insertUser', (req, res) => {
-  const { username, password, name, dateOfBirth, btype } = req.body;
+  const { username, password, name, dateOfBirth, btype, email } = req.body;
   let type = btype;
-  insertUser(username, password, name, type).then((data) => {
+  insertUser(username, password, name, type, email).then((data) => {
     console.log(data);
     res.send(data);
   }
@@ -229,6 +296,22 @@ app.post('/getAllProperties', (req, res) => {
 
 });
 
+app.post('/getAllPropertiesAdmin', (req, res) => {
+
+  const { id } = req.body;
+  if (id == 42) {
+    getAllPropertiesAdmin().then((data) => {
+      res.send(data);
+    }
+    );
+  }
+  else
+    res.send("INVALID USER");
+
+});
+
+
+
 app.post('/getAllUser', (req, res) => {
 
   const { id } = req.body;
@@ -242,3 +325,130 @@ app.post('/getAllUser', (req, res) => {
     res.send("INVALID USER");
 
 });
+
+
+app.post('/addProperty', (req, res) => {
+  const { user_id, address, type, price, fileName } = req.body;
+  let status = "pending";
+  addProperty(user_id, address, type, price, status, fileName).then((data) => {
+    res.send({ message: data });
+  }
+  );
+});
+
+app.post('/filterProperty', (req, res) => {
+  const { type, price } = req.body;
+  filterProperty(type, price).then((data) => {
+    res.send(data);
+  }
+  );
+});
+
+app.post('/purchaseProperty', (req, res) => {
+  const { property_id, buyerId } = req.body;
+  purchaseProperty(property_id, buyerId).then((data) => {
+    res.send(data);
+  }
+  );
+});
+
+app.post('/sellProperty', (req, res) => {
+  const { property_id } = req.body;
+  sellProperty(property_id).then((data) => {
+    res.send(data);
+  }
+  );
+});
+
+app.post('/buyerBoughtProperties', (req, res) => {
+  const { id } = req.body;
+  getBoughtProperties(id).then((data) => {
+    res.send(data);
+  }
+  );
+});
+
+app.post('/buyingotp', async (req, res) => {
+  const { buyerId } = req.body;
+  const { sellerId } = req.body;
+  // let email;
+  // getEmailfromID(buyerId).then((data) => {
+  //   console.log(data[0].email)
+  //   email = data[0].email;
+  // }
+  // );
+  try {
+    const getEmail = await getEmailfromID(buyerId);
+    const email = getEmail[0].email;
+    let tosendobject = { "email": email };
+    let response = await axios.post('https://192.168.2.241:5000/otp', tosendobject);
+    console.log(response.data);
+    const getName = await pool.query("SELECT name FROM userlist WHERE user_id = $1;", [buyerId]);
+    response.data.buyerName = getName.rows[0].name;
+    const getName2 = await pool.query("SELECT name FROM userlist WHERE user_id = $1;", [sellerId]);
+    response.data.sellerName = getName2.rows[0].name;
+    console.log(response.data);
+    res.send(response.data);
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+
+});
+
+
+app.post('/addContract', async (req, res) => {
+  const { buyerId } = req.body;
+  const { sellerId } = req.body;
+  const { buyerContract } = req.body;
+  const { sellerContract } = req.body;
+  try {
+    const response = await pool.query("INSERT INTO contracts (id, type, contract) VALUES ($1, $2, $3);", [buyerId, "buyer", buyerContract]);
+    const response2 = await pool.query("INSERT INTO contracts (id, type, contract) VALUES ($1, $2, $3);", [sellerId, "seller", sellerContract]);
+    res.send(response.rows);
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+app.post('/approveProperty', async (req, res) => {
+  const { property_id } = req.body;
+  try {
+    const response = await pool.query("UPDATE property SET status = 'available' WHERE property_id = $1;", [property_id]);
+    res.send(response.rows);
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+app.post('/deleteUser', async (req, res) => {
+  const { user_id } = req.body;
+  try {
+    const response = await pool.query("DELETE FROM userlist WHERE user_id = $1;", [user_id]);
+    res.send(response.rows);
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+}
+);
+
+app.post('/updatePropertyFiles', async (req, res) => {
+  const { property_id, fileName } = req.body;
+  try {
+    const response = await pool.query("UPDATE property SET filename = $1 WHERE property_id = $2;", [fileName, property_id]);
+    const response2 = await pool.query("UPDATE property SET status = 'pending' WHERE property_id = $1;", [property_id]);
+    res.send(response.rows);
+  }
+  catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+}
+);
