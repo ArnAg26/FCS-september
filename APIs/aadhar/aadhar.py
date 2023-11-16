@@ -19,6 +19,27 @@ from email.message import EmailMessage
 app = Flask(__name__)
 CORS(app)
 
+def getRand(length):
+    letters = string.ascii_letters
+    random_string = ''.join(random.choice(letters) for _ in range(length))
+    return random_string
+
+def encryptOTP(number):
+    number_str = str(number)
+    leftstr = number_str[:3]
+    rightstr=number_str[3:]
+    print(leftstr,rightstr)
+    result_str = ''
+    for digit in leftstr:
+        char = chr(int(digit) + 6 + ord('A'))  
+        result_str += char
+    for digit in rightstr:
+        char = chr(int(digit) + 10 + ord('A'))  
+        result_str += char
+    return getRand(4)+result_str+getRand(7)
+# Define your email configuration here
+email_sender = 'fcsonlineverify@gmail.com'
+email_password = 'qxwhytfhrtkenzij'
 ## Aadhaar API ##
 
 @app.route('/process_image', methods=['POST'])
@@ -144,9 +165,8 @@ def generate_certificate():
 
 
 ## OTP API ##
-email_sender = 'siddhant21101@iiitd.ac.in'
-email_password = 'eecyqsxlekdycjtn'
-
+email_sender = 'fcsonlineverify@gmail.com'
+email_password = 'qxwhytfhrtkenzij'
 def generate_otp():
     otp=""
     for i in range(6):
@@ -178,7 +198,7 @@ def generate_otp_endpoint():
             receiver_email = data['email']
             otp = generate_otp()
             send_otp_via_email(receiver_email, otp)
-            return jsonify({'otp': otp})
+            return jsonify({'otp': encryptOTP(otp)})
         else:
             return jsonify({'error': 'Email not provided'}), 400
     return jsonify({'error': 'Invalid request method'}), 405
